@@ -1,0 +1,8 @@
+# Your personal provider config (contains credentials - never commit this)
+x3miptv.cfg
+
+# Log file generated at runtime
+x3miptv.log
+
+# Lock file generated at runtime
+x3miptv.lock

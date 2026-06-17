@@ -1,0 +1,54 @@
+# =============================================================================
+# x3miptv.cfg.example
+# =============================================================================
+# Copy this file to x3miptv.cfg and edit it with your provider details.
+# x3miptv.cfg is gitignored to protect your credentials.
+#
+# FORMAT
+# ------
+# Each non-blank, non-comment line defines one IPTV provider source.
+# Fields are pipe-separated (|).
+#
+# M3U provider (direct playlist URL):
+#   M3U|<full_url>
+#
+#   The URL can be HTTP or HTTPS. Examples:
+#     M3U|http://provider.com/playlist.m3u
+#     M3U|https://provider.com/playlist.m3u8
+#     M3U|https://provider.com:8443/get.php?username=user&password=pass&type=m3u_plus
+#
+# Xtream Codes provider (server + credentials):
+#   XC|<server_url>|<username>|<password>
+#
+#   The script constructs the M3U URL from your credentials automatically.
+#   Include the protocol (http/https) and port in the server URL. Examples:
+#     XC|http://provider.com:8080|myuser|mypassword
+#     XC|https://provider.com:8443|myuser|mypassword
+#     XC|https://provider.com|myuser|mypassword
+#
+# Lines beginning with # are treated as comments and ignored.
+# Blank lines are ignored.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# FREE PUBLIC EXAMPLE - iptv-org UK channels
+# A community-maintained, legitimately free playlist. Safe to leave in place
+# for testing. See https://github.com/iptv-org/iptv for other regions/categories.
+# -----------------------------------------------------------------------------
+M3U|https://iptv-org.github.io/iptv/countries/gb.m3u
+
+# -----------------------------------------------------------------------------
+# YOUR PROVIDERS - uncomment and edit as needed
+# -----------------------------------------------------------------------------
+
+# Example M3U provider
+# M3U|https://yourprovider.com/get.php?username=user&password=pass&type=m3u_plus&output=mpegts
+
+# Example Xtream Codes provider (HTTP)
+# XC|http://yourprovider.com:8080|yourusername|yourpassword
+
+# Example Xtream Codes provider (HTTPS)
+# XC|https://yourprovider.com:8443|yourusername|yourpassword
+
+# You can add as many providers as you like - all domains and IPs are
+# accumulated and deduplicated before updating x3mRouting.
