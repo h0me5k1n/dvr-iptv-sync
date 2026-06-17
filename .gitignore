@@ -1,8 +1,8 @@
 # Your personal provider config (contains credentials - never commit this)
-x3miptv.cfg
+dvr-iptv-sync.cfg
 
 # Log file generated at runtime
-x3miptv.log
+dvr-iptv-sync.log
 
 # Lock file generated at runtime
-x3miptv.lock
+dvr-iptv-sync.lock

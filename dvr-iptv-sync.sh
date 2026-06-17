@@ -1,22 +1,22 @@
 #!/bin/sh
 # =============================================================================
-# x3miptv.sh - IPTV provider domain/IP routing manager for x3mRouting
+# dvr-iptv-sync.sh - IPTV provider domain routing manager for domain_vpn_routing
 # =============================================================================
 # Reads M3U or Xtream Codes provider URLs from a cfg file, extracts stream
-# domains and IPs, and updates x3mRouting IPSET lists on Asuswrt-Merlin routers.
+# domains, and updates a domain_vpn_routing policy on Asuswrt-Merlin routers.
 #
 # Usage:
-#   sh x3miptv.sh          - dry run (check only, no changes made)
-#   sh x3miptv.sh UPDATE   - apply updates to x3mRouting configuration
+#   sh dvr-iptv-sync.sh          - dry run (check only, no changes made)
+#   sh dvr-iptv-sync.sh UPDATE   - apply updates to domain_vpn_routing policy
 #
 # Requirements:
-#   - Asuswrt-Merlin firmware with x3mRouting installed
+#   - Asuswrt-Merlin firmware with domain_vpn_routing installed via amtm
 #   - Entware curl with SSL support (opkg install curl)
-#   - x3mRouting configured with at least one IPSET in /jffs/scripts/nat-start
+#   - A domain_vpn_routing policy already created (see README)
 #
 # Configuration:
-#   Edit x3miptv.cfg (in the same directory as this script) to add your
-#   IPTV provider URLs. See x3miptv.cfg.example for format details.
+#   Edit dvr-iptv-sync.cfg (in the same directory as this script) to add your
+#   IPTV provider URLs. See dvr-iptv-sync.cfg.example for format details.
 # =============================================================================
 
 SCRIPTNAME="$(basename "$0")"
@@ -25,10 +25,11 @@ vLOG="$SCRIPTDIR/${SCRIPTNAME%.*}.log"
 LOCKFILE="$SCRIPTDIR/${SCRIPTNAME%.*}.lock"
 LISTFILE="$SCRIPTDIR/${SCRIPTNAME%.*}.cfg"
 
-# IPSET name for domain-based routing (must exist in nat-start)
-DEFAULT_IPSET_NAME=IPTV
-# IPSET name for IP address-based routing (must exist in nat-start)
-IPADDRESS_IPSET_NAME=IPADDRESSTV
+# domain_vpn_routing policy name (must be created before running this script)
+POLICY_NAME=IPTV
+
+# Derived path to the policy domain list file
+DOMAINLIST_FILE="/jffs/configs/domain_vpn_routing/policy_${POLICY_NAME}_domainlist"
 
 # Timeout in seconds for curl requests
 CURLTIMEOUT=30
@@ -69,22 +70,27 @@ preflight_checks() {
     # Check cfg file exists
     if [ ! -f "$LISTFILE" ]; then
         echo "ERROR: Config file not found: $LISTFILE"
-        echo "       Copy x3miptv.cfg.example to x3miptv.cfg and edit it."
+        echo "       Copy dvr-iptv-sync.cfg.example to dvr-iptv-sync.cfg and edit it."
         ERRORS=$((ERRORS + 1))
     fi
 
-    # Check nat-start exists
-    if [ ! -f "/jffs/scripts/nat-start" ]; then
-        echo "ERROR: /jffs/scripts/nat-start not found."
-        echo "       x3mRouting must be installed and configured before running this script."
+    # Check domain_vpn_routing script exists
+    if [ ! -f "/jffs/scripts/domain_vpn_routing.sh" ]; then
+        echo "ERROR: /jffs/scripts/domain_vpn_routing.sh not found."
+        echo "       Install domain_vpn_routing via amtm:"
+        echo "         amtm"
+        echo "       Then select the option to install domain_vpn_routing."
         ERRORS=$((ERRORS + 1))
     fi
 
-    # Check x3mRouting is available
-    if ! command -v x3mRouting >/dev/null 2>&1; then
-        echo "ERROR: x3mRouting command not found."
-        echo "       Ensure x3mRouting is installed via amtm."
+    # Check policy domainlist file exists
+    if [ ! -f "$DOMAINLIST_FILE" ]; then
+        echo "ERROR: Policy domainlist not found: $DOMAINLIST_FILE"
+        echo "       Create the '$POLICY_NAME' policy in domain_vpn_routing first:"
+        echo "       /jffs/scripts/domain_vpn_routing.sh createpolicy"
         ERRORS=$((ERRORS + 1))
+    else
+        echo "  [OK] Policy $POLICY_NAME found"
     fi
 
     # Check curl is available
@@ -93,19 +99,12 @@ preflight_checks() {
         echo "       Install via Entware: opkg install curl"
         ERRORS=$((ERRORS + 1))
     else
-        # Check curl SSL support
         if ! curl --version 2>&1 | grep -qi "ssl\|openssl\|mbedtls\|wolfssl\|nss"; then
             echo "WARNING: curl may not have SSL support."
             echo "         Install Entware curl for HTTPS support: opkg install curl"
         else
             echo "  [OK] curl SSL support detected"
         fi
-    fi
-
-    # Check ipset is available
-    if ! command -v ipset >/dev/null 2>&1; then
-        echo "ERROR: ipset command not found."
-        ERRORS=$((ERRORS + 1))
     fi
 
     if [ "$ERRORS" -gt 0 ]; then
@@ -128,7 +127,6 @@ build_xc_url() {
     local SERVER="$1"
     local USER="$2"
     local PASS="$3"
-    # Strip any trailing slash from server URL
     SERVER="${SERVER%/}"
     echo "${SERVER}/get.php?username=${USER}&password=${PASS}&type=m3u_plus&output=mpegts"
 }
@@ -137,7 +135,7 @@ build_xc_url() {
 # M3U PROCESSING
 # =============================================================================
 
-# Fetch an M3U from a URL and extract unique domains and IP addresses
+# Fetch an M3U from a URL and extract unique hosts from stream URLs
 fetch_and_extract() {
     local URL="$1"
     local LABEL="$2"
@@ -151,23 +149,16 @@ fetch_and_extract() {
         return 1
     fi
 
-    # Extract unique hosts (domain or IP) from stream URLs
-    # Handles http and https, with or without port numbers
+    # Extract unique hosts from stream URLs (http/https, with or without port)
     echo "$CONTENT" | grep -E "^https?://" | awk -F[/:] '{print $4}' | sort -u
 }
 
-# Determine whether a string is an IPv4 address
-is_ip_address() {
-    expr "$1" : '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$' >/dev/null 2>&1
-}
-
-# Get the top-level domain for a hostname, respecting dynamic DNS providers
+# Get the routing domain for a hostname, respecting dynamic DNS providers
 get_routing_domain() {
     local DOMAIN="$1"
     local TLD
     TLD=$(echo "$DOMAIN" | grep -o '[^.]*\.[^.]*$')
 
-    # Check if TLD matches a known dynamic DNS provider — if so use full domain
     local DYN
     for DYN in $DYNAMIC_DNS_PROVIDERS; do
         if [ "$TLD" = "$DYN" ]; then
@@ -180,82 +171,56 @@ get_routing_domain() {
 }
 
 # =============================================================================
-# X3MROUTING UPDATE LOGIC
+# DOMAIN_VPN_ROUTING UPDATE LOGIC
 # =============================================================================
 
 process_hosts() {
     local HOSTS="$1"
+    local NEW_DOMAINS=""
 
-    # Read current x3mRouting lines from nat-start
-    local X3M_LINE_ORIGINAL
-    X3M_LINE_ORIGINAL=$(grep "/jffs/scripts/x3mRouting/x3mRouting.sh" /jffs/scripts/nat-start | grep "$DEFAULT_IPSET_NAME" | head -1)
-    X3M_LINE_ORIGINAL="${X3M_LINE_ORIGINAL/sh \/jffs\/scripts\/x3mRouting\/x3mRouting.sh/x3mRouting}"
-    local X3M_LINE="$X3M_LINE_ORIGINAL"
-
-    local X3M_LINE_IP_ORIGINAL
-    X3M_LINE_IP_ORIGINAL=$(grep "/jffs/scripts/x3mRouting/x3mRouting.sh" /jffs/scripts/nat-start | grep "$IPADDRESS_IPSET_NAME" | head -1)
-    X3M_LINE_IP_ORIGINAL="${X3M_LINE_IP_ORIGINAL/sh \/jffs\/scripts\/x3mRouting\/x3mRouting.sh/x3mRouting}"
-    local X3M_LINE_IP="$X3M_LINE_IP_ORIGINAL"
-
-    # Collect all IPs currently in the IP IPSET
-    local EXISTING_IPS
-    EXISTING_IPS=$(ipset -L "$IPADDRESS_IPSET_NAME" 2>/dev/null | grep -E "^[0-9]+\." | sort -u)
-
-    # Track new IPs to add
-    local NEW_IPS="$EXISTING_IPS"
+    # Read existing entries from the policy domainlist
+    local EXISTING
+    EXISTING=$(grep -v '^$' "$DOMAINLIST_FILE" 2>/dev/null)
 
     for HOST in $HOSTS; do
-        if is_ip_address "$HOST"; then
-            # --- IP address handling ---
-            if echo "$EXISTING_IPS" | grep -q "^${HOST}$"; then
-                log_and_print "  [IP ] $HOST already in $IPADDRESS_IPSET_NAME"
-            else
-                log_and_print "  [IP+] $HOST NOT in $IPADDRESS_IPSET_NAME - will add"
-                NEW_IPS=$(printf "%s\n%s" "$NEW_IPS" "$HOST" | sort -u)
-            fi
-        else
-            # --- Domain handling ---
-            local RDOMAIN
-            RDOMAIN=$(get_routing_domain "$HOST")
+        # Skip bare IP addresses - domain_vpn_routing is domain-based only
+        if expr "$HOST" : '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$' >/dev/null 2>&1; then
+            log_and_print "  [SKIP] $HOST is a bare IP address - skipping"
+            continue
+        fi
 
-            if grep "/jffs/scripts/x3mRouting/x3mRouting.sh" /jffs/scripts/nat-start | grep "$DEFAULT_IPSET_NAME" | grep -q "$RDOMAIN"; then
-                log_and_print "  [DOM] $HOST (routing as $RDOMAIN) already in $DEFAULT_IPSET_NAME"
-            else
-                log_and_print "  [DOM+] $HOST (routing as $RDOMAIN) NOT in $DEFAULT_IPSET_NAME - will add"
-                X3M_LINE="${X3M_LINE},${RDOMAIN}"
+        local RDOMAIN
+        RDOMAIN=$(get_routing_domain "$HOST")
+
+        if echo "$EXISTING" | grep -qxF "$RDOMAIN"; then
+            log_and_print "  [DOM ] $HOST (routing as $RDOMAIN) already in policy"
+        else
+            log_and_print "  [DOM+] $HOST (routing as $RDOMAIN) NOT in policy - will add"
+            # Avoid duplicates within a single run
+            if ! echo "$NEW_DOMAINS" | grep -qxF "$RDOMAIN" 2>/dev/null; then
+                NEW_DOMAINS=$(printf "%s\n%s" "$NEW_DOMAINS" "$RDOMAIN")
             fi
         fi
     done
 
-    # --- Apply domain IPSET updates ---
-    if [ "$X3M_LINE" != "$X3M_LINE_ORIGINAL" ]; then
-        if [ "$ACTION" = "UPDATE" ]; then
-            log_and_print "Applying domain IPSET update for $DEFAULT_IPSET_NAME..."
-            x3mRouting ipset_name="$DEFAULT_IPSET_NAME" del
-            $X3M_LINE
-            log_and_print "Domain IPSET updated successfully."
-        else
-            log_and_print "Domain IPSET update required (run with UPDATE to apply)."
-        fi
-    else
-        log_and_print "Domain IPSET $DEFAULT_IPSET_NAME is up to date."
-    fi
+    NEW_DOMAINS=$(echo "$NEW_DOMAINS" | grep -v '^$')
 
-    # --- Apply IP IPSET updates ---
-    if [ "$NEW_IPS" != "$EXISTING_IPS" ]; then
+    if [ -n "$NEW_DOMAINS" ]; then
+        local COUNT
+        COUNT=$(echo "$NEW_DOMAINS" | wc -l)
         if [ "$ACTION" = "UPDATE" ]; then
-            log_and_print "Applying IP IPSET update for $IPADDRESS_IPSET_NAME..."
-            # Build comma-separated IP list for x3mRouting
-            local IP_LIST
-            IP_LIST=$(echo "$NEW_IPS" | tr '\n' ',' | sed 's/,$//')
-            x3mRouting ipset_name="$IPADDRESS_IPSET_NAME" del
-            x3mRouting ipset_name="$IPADDRESS_IPSET_NAME" ip="$IP_LIST"
-            log_and_print "IP IPSET updated successfully."
+            log_and_print "Adding $COUNT new domain(s) to policy $POLICY_NAME..."
+            printf "%s\n" "$NEW_DOMAINS" >> "$DOMAINLIST_FILE"
+            # domain_vpn_routing requires a trailing blank line in the domainlist
+            printf "\n" >> "$DOMAINLIST_FILE"
+            log_and_print "Querying policy $POLICY_NAME..."
+            sh /jffs/scripts/domain_vpn_routing.sh querypolicy "$POLICY_NAME"
+            log_and_print "Policy query completed."
         else
-            log_and_print "IP IPSET update required (run with UPDATE to apply)."
+            log_and_print "$COUNT domain(s) would be added (run with UPDATE to apply)."
         fi
     else
-        log_and_print "IP IPSET $IPADDRESS_IPSET_NAME is up to date."
+        log_and_print "Policy $POLICY_NAME is already up to date."
     fi
 }
 
@@ -270,14 +235,12 @@ if [ -f "$LOCKFILE" ]; then
 fi
 touch "$LOCKFILE"
 
-# Ensure lockfile is removed on exit
 trap 'rm -f "$LOCKFILE"' EXIT
 
 TrimLog
 PrintLog "-----"
 PrintLog "$SCRIPTNAME started"
 
-# Determine action
 ACTION="${1:-null}"
 if [ "$ACTION" = "UPDATE" ]; then
     log_and_print "Mode: UPDATE (changes will be applied)"
@@ -286,20 +249,15 @@ else
 fi
 echo ""
 
-# Run preflight checks
 preflight_checks
 
-# Accumulate all hosts across all providers
 ALL_HOSTS=""
 
-# Read and process each line of the cfg file
 while IFS= read -r LINE; do
-    # Skip blank lines and comments
     case "$LINE" in
         ""|\#*) continue ;;
     esac
 
-    # Parse line type
     TYPE=$(echo "$LINE" | cut -d'|' -f1)
 
     case "$TYPE" in
@@ -323,9 +281,8 @@ while IFS= read -r LINE; do
     esac
 
     if [ -n "$HOSTS" ]; then
-        HOSTCOUNT=$(echo "$HOSTS" | wc -w)
+        HOSTCOUNT=$(echo "$HOSTS" | wc -l)
         log_and_print "  Found $HOSTCOUNT unique host(s)"
-        # Accumulate, deduplicating as we go
         ALL_HOSTS=$(printf "%s\n%s" "$ALL_HOSTS" "$HOSTS" | sort -u | grep -v '^$')
     fi
 
@@ -333,7 +290,6 @@ while IFS= read -r LINE; do
 
 done < "$LISTFILE"
 
-# Process all accumulated hosts against x3mRouting
 if [ -n "$ALL_HOSTS" ]; then
     TOTAL=$(echo "$ALL_HOSTS" | wc -l)
     log_and_print "Processing $TOTAL unique host(s) across all providers..."

@@ -1,20 +1,19 @@
-# x3miptv
+# dvr-iptv-sync
 
-Automatically manages [x3mRouting](https://github.com/Xentrk/x3mRouting) IPSET lists on Asuswrt-Merlin routers based on the domains and IP addresses found in your IPTV provider playlists.
+Automatically manages a [domain_vpn_routing](https://github.com/Ranger802004/asusmerlin/tree/main/domain_vpn_routing) policy on Asuswrt-Merlin routers based on the domains found in your IPTV provider playlists.
 
 ## The Problem
 
-If you run NordVPN (or any VPN) on your Asus router via Asuswrt-Merlin and want your IPTV streams routed through it, you need to tell x3mRouting which domains and IPs belong to your IPTV providers. These can change when providers update their infrastructure, and managing them manually is tedious.
+If you run a VPN on your Asus router via Asuswrt-Merlin and want IPTV streams routed through it (or excluded from it), you need to tell domain_vpn_routing which domains belong to your IPTV providers. These can change when providers update their infrastructure, and managing them manually is tedious.
 
-This script automates that: it fetches your M3U playlists, extracts the streaming domains and IP addresses, compares them against your existing x3mRouting IPSET lists, and updates them if anything has changed.
+This script automates that: it fetches your M3U playlists, extracts the streaming domains, compares them against your existing domain_vpn_routing policy, and adds anything new.
 
 ## Features
 
 - Supports **M3U** and **Xtream Codes (XC)** provider types
 - Supports **HTTP and HTTPS** provider URLs
-- Handles both **domain-based** and **IP address-based** IPSET lists
 - **Dry run by default** — no changes made unless you explicitly pass `UPDATE`
-- Accumulates and deduplicates hosts across multiple providers before updating
+- Accumulates and deduplicates domains across multiple providers before updating
 - Handles **dynamic DNS providers** (uses full domain rather than TLD)
 - Preflight checks for dependencies before doing any work
 - Lock file prevents concurrent runs
@@ -23,9 +22,18 @@ This script automates that: it fetches your M3U playlists, extracts the streamin
 ## Requirements
 
 - Asus router running [Asuswrt-Merlin](https://www.asuswrt-merlin.net/) firmware
-- [x3mRouting](https://github.com/Xentrk/x3mRouting) installed and configured via [amtm](https://diversion.ch/amtm/)
-- At least one IPSET list already configured in `/jffs/scripts/nat-start`
+- [domain_vpn_routing](https://github.com/Ranger802004/asusmerlin/tree/main/domain_vpn_routing) installed via amtm and a policy created (see below)
 - Entware `curl` with SSL support (see below)
+
+### Installing domain_vpn_routing
+
+SSH into your router and run:
+
+```sh
+amtm
+```
+
+Navigate to the addon installer and select **domain_vpn_routing** to install it. Follow the on-screen prompts.
 
 ### Installing Entware curl with SSL support
 
@@ -45,53 +53,58 @@ You should see something like `OpenSSL` or `mbedTLS` in the output. The script w
 
 ## Installation
 
-### 1. Copy the script to your router
+### 1. Create a domain_vpn_routing policy for IPTV
+
+Before running this script you need a policy to write into. Create one interactively:
+
+```sh
+/jffs/scripts/domain_vpn_routing.sh createpolicy
+```
+
+When prompted:
+- **Policy name**: `IPTV` (or whatever you set as `POLICY_NAME` in `dvr-iptv-sync.sh`)
+- **Interface**: the VPN or WAN interface IPTV traffic should use
+- **Verbose logging**: your preference
+- **Private IP addresses**: disable (IPTV streams use public IPs)
+- **Add CNAMEs**: enable if you have `dig` installed via Entware, otherwise disable
+
+### 2. Copy the script to your router
 
 The recommended location is your router USB drive, which persists across reboots.
 
 Via SCP from your PC:
 
 ```sh
-scp x3miptv.sh admin@192.168.1.1:/tmp/mnt/routerusb/x3miptv/
-scp x3miptv.cfg.example admin@192.168.1.1:/tmp/mnt/routerusb/x3miptv/
+scp dvr-iptv-sync.sh admin@192.168.1.1:/tmp/mnt/routerusb/dvr-iptv-sync/
+scp dvr-iptv-sync.cfg.example admin@192.168.1.1:/tmp/mnt/routerusb/dvr-iptv-sync/
 ```
 
-Or SSH into the router and clone/download directly if you have git or wget available via Entware.
-
-### 2. Make the script executable
+### 3. Make the script executable
 
 ```sh
-chmod +x /tmp/mnt/routerusb/x3miptv/x3miptv.sh
+chmod +x /tmp/mnt/routerusb/dvr-iptv-sync/dvr-iptv-sync.sh
 ```
 
-### 3. Create your config file
+### 4. Create your config file
 
 ```sh
-cp /tmp/mnt/routerusb/x3miptv/x3miptv.cfg.example \
-   /tmp/mnt/routerusb/x3miptv/x3miptv.cfg
+cp /tmp/mnt/routerusb/dvr-iptv-sync/dvr-iptv-sync.cfg.example \
+   /tmp/mnt/routerusb/dvr-iptv-sync/dvr-iptv-sync.cfg
 ```
 
-Edit `x3miptv.cfg` with your provider details (see [Configuration](#configuration) below).
+Edit `dvr-iptv-sync.cfg` with your provider details (see [Configuration](#configuration) below).
 
-### 4. Ensure your x3mRouting IPSETs exist
+### 5. Set the policy name
 
-The script expects at least one IPSET already configured in `/jffs/scripts/nat-start`. The default IPSET names are:
-
-| Purpose | Default name |
-|---|---|
-| Domain-based routing | `IPTV` |
-| IP address-based routing | `IPADDRESSTV` |
-
-These names can be changed at the top of `x3miptv.sh` if yours differ:
+If you named your policy something other than `IPTV`, update this line near the top of `dvr-iptv-sync.sh`:
 
 ```sh
-DEFAULT_IPSET_NAME=IPTV
-IPADDRESS_IPSET_NAME=IPADDRESSTV
+POLICY_NAME=IPTV
 ```
 
 ## Configuration
 
-Your config file (`x3miptv.cfg`) uses a simple pipe-separated format. Lines beginning with `#` are comments. Blank lines are ignored.
+Your config file (`dvr-iptv-sync.cfg`) uses a simple pipe-separated format. Lines beginning with `#` are comments. Blank lines are ignored.
 
 ### M3U provider
 
@@ -123,7 +136,7 @@ XC|https://yourprovider.com:8443|yourusername|yourpassword
 
 ### Multiple providers
 
-Add as many lines as you need. All domains and IPs are accumulated and deduplicated across all providers before updating x3mRouting.
+Add as many lines as you need. All domains are accumulated and deduplicated across all providers before updating the policy.
 
 ```
 M3U|https://iptv-org.github.io/iptv/countries/gb.m3u
@@ -136,33 +149,35 @@ XC|https://provider2.com:8443|user2|pass2
 ### Dry run (check only — no changes made)
 
 ```sh
-sh /tmp/mnt/routerusb/x3miptv/x3miptv.sh
+sh /tmp/mnt/routerusb/dvr-iptv-sync/dvr-iptv-sync.sh
 ```
 
-This shows what would be added to your IPSET lists without making any changes. Always run this first to verify the output looks correct.
+Shows what would be added to your policy without making any changes. Always run this first to verify the output looks correct.
 
 ### Apply updates
 
 ```sh
-sh /tmp/mnt/routerusb/x3miptv/x3miptv.sh UPDATE
+sh /tmp/mnt/routerusb/dvr-iptv-sync/dvr-iptv-sync.sh UPDATE
 ```
 
-This updates your x3mRouting IPSET lists with any new domains or IPs found.
+Adds any new domains found in your playlists to the domain_vpn_routing policy and triggers a policy query so routes are created immediately.
 
 ## Scheduling with cron
 
-IPTV provider IPs and domains don't change frequently, but automating a periodic check means you won't be caught out. A daily check is plenty.
+IPTV provider domains don't change frequently, but automating a periodic check means you won't be caught out. A daily check is plenty.
 
 Add a cron job via the Merlin UI (**Administration → System → Cron Job**), or directly via Entware cron:
 
 ```sh
 # Run at 03:00 every day, applying updates automatically
-0 3 * * * sh /tmp/mnt/routerusb/x3miptv/x3miptv.sh UPDATE >> /tmp/mnt/routerusb/x3miptv/x3miptv.log 2>&1
+0 3 * * * sh /tmp/mnt/routerusb/dvr-iptv-sync/dvr-iptv-sync.sh UPDATE >> /tmp/mnt/routerusb/dvr-iptv-sync/dvr-iptv-sync.log 2>&1
 ```
+
+domain_vpn_routing also runs its own cron job (every 15 minutes by default) to re-query all policies, so newly added domains will be picked up even without this script re-running.
 
 ## Editing your config without SSH
 
-Your `x3miptv.cfg` lives on the router USB drive, which is accessible in several ways without needing to SSH in:
+Your `dvr-iptv-sync.cfg` lives on the router USB drive, which is accessible in several ways without needing to SSH in:
 
 ### Samba (Windows network share) — easiest
 
@@ -170,35 +185,28 @@ Enable the USB share in the Merlin web UI under **USB Application → Network Pl
 
 ### SFTP (WinSCP / Cyberduck / Filezilla)
 
-Connect to your router IP on port 22 using your admin credentials. Navigate to `/tmp/mnt/routerusb/x3miptv/` and edit or replace `x3miptv.cfg` directly.
+Connect to your router IP on port 22 using your admin credentials. Navigate to `/tmp/mnt/routerusb/dvr-iptv-sync/` and edit or replace `dvr-iptv-sync.cfg` directly.
 
 ### Push from your PC via SCP
 
 ```sh
-scp /path/to/local/x3miptv.cfg admin@192.168.1.1:/tmp/mnt/routerusb/x3miptv/
-```
-
-### SSH one-liner (overwrite cfg from local file)
-
-```sh
-ssh admin@192.168.1.1 "cat > /tmp/mnt/routerusb/x3miptv/x3miptv.cfg" < x3miptv.cfg
+scp /path/to/local/dvr-iptv-sync.cfg admin@192.168.1.1:/tmp/mnt/routerusb/dvr-iptv-sync/
 ```
 
 ## Logs
 
-Runtime logs are written to `x3miptv.log` in the same directory as the script. The log is automatically trimmed to the last 250 lines to avoid filling up the USB drive.
-
-View the log:
+Runtime logs are written to `dvr-iptv-sync.log` in the same directory as the script. The log is automatically trimmed to the last 250 lines to avoid filling up the USB drive.
 
 ```sh
-cat /tmp/mnt/routerusb/x3miptv/x3miptv.log
+cat /tmp/mnt/routerusb/dvr-iptv-sync/dvr-iptv-sync.log
 ```
 
 ## Notes and Limitations
 
-- The script does not create new IPSET lists — they must already exist in `/jffs/scripts/nat-start`. This is by design to avoid accidentally modifying your routing configuration.
-- If a provider is down or returns no data at the time the script runs, that provider is skipped with a warning and existing IPSET entries are preserved.
-- The script handles providers whose stream URLs use bare IP addresses (no domain) via the separate `IPADDRESS_IPSET_NAME` IPSET.
+- The script only **adds** domains to the policy — it never removes them. If a provider removes a domain from their playlist, you can remove it manually via `domain_vpn_routing.sh deletedomain <domain>`.
+- The script does not create the domain_vpn_routing policy — it must already exist. This is by design to avoid accidentally modifying your routing configuration.
+- If a provider is down or returns no data at the time the script runs, that provider is skipped with a warning and the existing policy is left unchanged.
+- Bare IP addresses in playlist stream URLs are skipped with a warning — domain_vpn_routing is domain-based only.
 
 ## Contributing
 

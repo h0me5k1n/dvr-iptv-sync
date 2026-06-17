@@ -1,8 +1,8 @@
 # =============================================================================
-# x3miptv.cfg.example
+# dvr-iptv-sync.cfg.example
 # =============================================================================
-# Copy this file to x3miptv.cfg and edit it with your provider details.
-# x3miptv.cfg is gitignored to protect your credentials.
+# Copy this file to dvr-iptv-sync.cfg and edit it with your provider details.
+# dvr-iptv-sync.cfg is gitignored to protect your credentials.
 #
 # FORMAT
 # ------
@@ -50,5 +50,5 @@ M3U|https://iptv-org.github.io/iptv/countries/gb.m3u
 # Example Xtream Codes provider (HTTPS)
 # XC|https://yourprovider.com:8443|yourusername|yourpassword
 
-# You can add as many providers as you like - all domains and IPs are
-# accumulated and deduplicated before updating x3mRouting.
+# You can add as many providers as you like - all domains are accumulated
+# and deduplicated before updating the domain_vpn_routing policy.
