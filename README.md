@@ -190,7 +190,7 @@ Use the Merlin `cru` command to register the job. To survive reboots, add it to 
 
 ```sh
 #!/bin/sh
-cru a dvr-iptv-sync "0 3,12,19 * * * sh /tmp/mnt/routerusb/dvr-iptv-sync/dvr-iptv-sync.sh UPDATE >> /tmp/mnt/routerusb/dvr-iptv-sync/dvr-iptv-sync.log 2>&1"
+cru a dvr-iptv-sync "0 3,12,19 * * * sh /tmp/mnt/routerusb/dvr-iptv-sync/dvr-iptv-sync.sh UPDATE"
 ```
 
 Make the file executable:

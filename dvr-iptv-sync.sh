@@ -54,16 +54,23 @@ PrintLog() {
 }
 
 TrimLog() {
-    touch "$vLOG"
-    NumLogLines=$(wc -l < "$vLOG")
-    if [ "$NumLogLines" -gt 500 ]; then
-        echo "$(tail -250 "$vLOG")" > "$vLOG"
+    [ -f "$vLOG" ] || return
+    local LINES
+    LINES=$(wc -l < "$vLOG")
+    if [ "$LINES" -gt 500 ]; then
+        local TMP
+        TMP=$(mktemp /tmp/dvr_iptv_sync_trim.XXXXXX)
+        tail -250 "$vLOG" > "$TMP" && mv "$TMP" "$vLOG"
     fi
 }
 
 log_and_print() {
     echo "$*"
     PrintLog "$*"
+}
+
+SysLog() {
+    logger -t "dvr-iptv-sync" "$*"
 }
 
 # =============================================================================
@@ -159,7 +166,7 @@ preflight_checks() {
     if ! grep -qs "dvr-iptv-sync" /jffs/scripts/services-start; then
         echo "  WARNING: Cron job not found in /jffs/scripts/services-start."
         echo "           The schedule will not survive a reboot. To fix, run:"
-        echo "           echo 'cru a dvr-iptv-sync \"0 3,12,19 * * * sh ${SCRIPTDIR}/${SCRIPTNAME} UPDATE >> ${vLOG} 2>&1\"' >> /jffs/scripts/services-start"
+        echo "           echo 'cru a dvr-iptv-sync \"0 3,12,19 * * * sh ${SCRIPTDIR}/${SCRIPTNAME} UPDATE\"' >> /jffs/scripts/services-start"
         echo "           chmod +x /jffs/scripts/services-start"
     else
         echo "  [OK] Cron job persisted in services-start"
@@ -169,6 +176,7 @@ preflight_checks() {
         echo ""
         echo "Preflight checks failed with $ERRORS error(s). Exiting."
         PrintLog "Preflight checks failed with $ERRORS error(s). Exiting."
+        SysLog "ERROR: preflight failed with $ERRORS error(s)"
         exit 1
     fi
 
@@ -213,6 +221,7 @@ fetch_and_extract() {
     if [ ! -s "$TMPFILE" ]; then
         echo "  WARNING: No content returned from $LABEL" >&2
         PrintLog "  WARNING: No content returned from $LABEL"
+        SysLog "WARNING: no content returned from $LABEL"
         rm -f "$TMPFILE"
         return 1
     fi
@@ -226,6 +235,7 @@ fetch_and_extract() {
         echo "  WARNING: Playlist received but no http(s) stream URLs found." >&2
         echo "           Stream URLs must appear at the start of a line." >&2
         PrintLog "  WARNING: Playlist received but no http(s) stream URLs found from $LABEL"
+        SysLog "WARNING: no stream URLs found in playlist from $LABEL"
         return 1
     fi
 
@@ -295,11 +305,14 @@ process_hosts() {
             log_and_print "Querying policy $POLICY_NAME..."
             sh /jffs/scripts/domain_vpn_routing.sh querypolicy "$POLICY_NAME"
             log_and_print "Policy query completed."
+            SYNC_RESULT="$COUNT domain(s) added to policy $POLICY_NAME"
         else
             log_and_print "$COUNT domain(s) would be added (run with UPDATE to apply)."
+            SYNC_RESULT="DRY RUN: $COUNT domain(s) would be added to policy $POLICY_NAME"
         fi
     else
         log_and_print "Policy $POLICY_NAME is already up to date."
+        SYNC_RESULT="policy $POLICY_NAME up to date"
     fi
 }
 
@@ -321,11 +334,14 @@ PrintLog "-----"
 PrintLog "$SCRIPTNAME started"
 
 ACTION="${1:-null}"
+SYNC_RESULT="no hosts found"
+
 if [ "$ACTION" = "UPDATE" ]; then
     log_and_print "Mode: UPDATE (changes will be applied)"
 else
     log_and_print "Mode: DRY RUN (pass UPDATE as argument to apply changes)"
 fi
+SysLog "started [$ACTION]"
 echo ""
 
 preflight_checks
@@ -386,3 +402,4 @@ fi
 echo ""
 PrintLog "$SCRIPTNAME completed"
 log_and_print "$SCRIPTNAME completed."
+SysLog "completed - $SYNC_RESULT"
