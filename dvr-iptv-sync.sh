@@ -158,7 +158,9 @@ preflight_checks() {
     # Warn if cru job is not persisted in services-start (won't survive reboot)
     if ! grep -qs "dvr-iptv-sync" /jffs/scripts/services-start; then
         echo "  WARNING: Cron job not found in /jffs/scripts/services-start."
-        echo "           The schedule will not survive a reboot. See README for setup."
+        echo "           The schedule will not survive a reboot. To fix, run:"
+        echo "           echo 'cru a dvr-iptv-sync \"0 3,12,19 * * * sh ${SCRIPTDIR}/${SCRIPTNAME} UPDATE >> ${vLOG} 2>&1\"' >> /jffs/scripts/services-start"
+        echo "           chmod +x /jffs/scripts/services-start"
     else
         echo "  [OK] Cron job persisted in services-start"
     fi
