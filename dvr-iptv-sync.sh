@@ -208,8 +208,18 @@ fetch_and_extract() {
     fi
 
     # Extract unique hosts from stream URLs (http/https, with or without port)
-    grep -E "^https?://" "$TMPFILE" | awk -F[/:] '{print $4}' | sort -u
+    local RESULT
+    RESULT=$(grep -E "^https?://" "$TMPFILE" | awk -F[/:] '{print $4}' | sort -u)
     rm -f "$TMPFILE"
+
+    if [ -z "$RESULT" ]; then
+        echo "  WARNING: Playlist received but no http(s) stream URLs found." >&2
+        echo "           Stream URLs must appear at the start of a line." >&2
+        PrintLog "  WARNING: Playlist received but no http(s) stream URLs found from $LABEL"
+        return 1
+    fi
+
+    echo "$RESULT"
 }
 
 # Get the routing domain for a hostname, respecting dynamic DNS providers
@@ -343,7 +353,10 @@ while IFS= read -r LINE; do
 
     if [ -n "$HOSTS" ]; then
         HOSTCOUNT=$(echo "$HOSTS" | wc -l)
-        log_and_print "  Found $HOSTCOUNT unique host(s)"
+        log_and_print "  Found $HOSTCOUNT unique host(s):"
+        echo "$HOSTS" | while IFS= read -r H; do
+            log_and_print "    $(get_routing_domain "$H") (from $H)"
+        done
         ALL_HOSTS=$(printf "%s\n%s" "$ALL_HOSTS" "$HOSTS" | sort -u | grep -v '^$')
     fi
 
