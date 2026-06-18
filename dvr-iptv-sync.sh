@@ -138,22 +138,29 @@ build_xc_url() {
 # M3U PROCESSING
 # =============================================================================
 
-# Fetch an M3U from a URL and extract unique hosts from stream URLs
+# Fetch an M3U from a URL and extract unique hosts from stream URLs.
+# All log output goes to stderr so it is not captured when called with $().
+# Content is written to a temp file to avoid busybox shell variable size limits.
 fetch_and_extract() {
     local URL="$1"
     local LABEL="$2"
+    local TMPFILE="/tmp/dvr_iptv_sync_$$.m3u"
 
-    log_and_print "  Fetching M3U from: $LABEL"
-    local CONTENT
-    CONTENT=$(curl --connect-timeout "$CURLTIMEOUT" -s -L "$URL")
+    echo "  Fetching M3U from: $LABEL" >&2
+    PrintLog "  Fetching M3U from: $LABEL"
 
-    if [ -z "$CONTENT" ]; then
-        log_and_print "  WARNING: No content returned from $LABEL"
+    curl --connect-timeout "$CURLTIMEOUT" -s -L "$URL" -o "$TMPFILE"
+
+    if [ ! -s "$TMPFILE" ]; then
+        echo "  WARNING: No content returned from $LABEL" >&2
+        PrintLog "  WARNING: No content returned from $LABEL"
+        rm -f "$TMPFILE"
         return 1
     fi
 
     # Extract unique hosts from stream URLs (http/https, with or without port)
-    echo "$CONTENT" | grep -E "^https?://" | awk -F[/:] '{print $4}' | sort -u
+    grep -E "^https?://" "$TMPFILE" | awk -F[/:] '{print $4}' | sort -u
+    rm -f "$TMPFILE"
 }
 
 # Get the routing domain for a hostname, respecting dynamic DNS providers
@@ -257,6 +264,8 @@ preflight_checks
 ALL_HOSTS=""
 
 while IFS= read -r LINE; do
+    # Strip carriage returns (CRLF files) and leading/trailing whitespace
+    LINE=$(printf '%s' "$LINE" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
     case "$LINE" in
         ""|\#*) continue ;;
     esac
