@@ -37,6 +37,13 @@ DOMAINLIST_FILE="/jffs/configs/domain_vpn_routing/policy_${POLICY_NAME}_domainli
 # Timeout in seconds for curl requests
 CURLTIMEOUT=30
 
+# Optional: network interface to bind playlist downloads to.
+# Use this if your provider blocks direct downloads and you need to fetch via VPN.
+# OpenVPN clients: tun11, tun12, tun13, tun14, tun15
+# WireGuard clients: wg11, wg12, wg13, wg14, wg15
+# Leave empty to use default routing.
+CURL_INTERFACE=""
+
 # Known dynamic DNS providers - use full domain rather than TLD for these
 DYNAMIC_DNS_PROVIDERS="ddns.net dynns.com no-ip.com dyndns.org"
 
@@ -149,7 +156,11 @@ fetch_and_extract() {
     echo "  Fetching M3U from: $LABEL" >&2
     PrintLog "  Fetching M3U from: $LABEL"
 
-    curl --connect-timeout "$CURLTIMEOUT" -s -L "$URL" -o "$TMPFILE"
+    if [ -n "$CURL_INTERFACE" ]; then
+        curl --interface "$CURL_INTERFACE" --connect-timeout "$CURLTIMEOUT" -s -L "$URL" -o "$TMPFILE"
+    else
+        curl --connect-timeout "$CURLTIMEOUT" -s -L "$URL" -o "$TMPFILE"
+    fi
 
     if [ ! -s "$TMPFILE" ]; then
         echo "  WARNING: No content returned from $LABEL" >&2

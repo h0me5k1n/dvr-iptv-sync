@@ -102,6 +102,22 @@ If you named your policy something other than `IPTV`, update this line near the 
 POLICY_NAME=IPTV
 ```
 
+### 6. (Optional) Route playlist downloads through VPN
+
+If your provider blocks direct playlist downloads, you can force the `curl` fetches through a VPN tunnel interface. Set `CURL_INTERFACE` near the top of `dvr-iptv-sync.sh`:
+
+```sh
+# OpenVPN client 1
+CURL_INTERFACE=tun11
+
+# WireGuard client 1
+CURL_INTERFACE=wg11
+```
+
+Leave it empty (the default) to use normal routing.
+
+Interface names on Asuswrt-Merlin follow the pattern `tun1X` for OpenVPN and `wg1X` for WireGuard, where X is the client number (1–5). You can confirm the active interface name with `ip link show` on the router.
+
 ## Configuration
 
 Your config file (`dvr-iptv-sync.cfg`) uses a simple pipe-separated format. Lines beginning with `#` are comments. Blank lines are ignored.
