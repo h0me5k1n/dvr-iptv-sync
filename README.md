@@ -72,11 +72,11 @@ When prompted:
 
 The recommended location is your router USB drive, which persists across reboots.
 
-Via SCP from your PC:
+Via SCP from your PC (the `-O` flag is required on modern OpenSSH — dropbear on the router doesn't support the SFTP-based scp used by default since OpenSSH 9.0):
 
 ```sh
-scp dvr-iptv-sync.sh admin@192.168.1.1:/tmp/mnt/routerusb/dvr-iptv-sync/
-scp dvr-iptv-sync.cfg.example admin@192.168.1.1:/tmp/mnt/routerusb/dvr-iptv-sync/
+scp -O dvr-iptv-sync.sh admin@192.168.1.1:/tmp/mnt/routerusb/dvr-iptv-sync/
+scp -O dvr-iptv-sync.cfg.example admin@192.168.1.1:/tmp/mnt/routerusb/dvr-iptv-sync/
 ```
 
 ### 3. Make the script executable
@@ -190,7 +190,7 @@ Connect to your router IP on port 22 using your admin credentials. Navigate to `
 ### Push from your PC via SCP
 
 ```sh
-scp /path/to/local/dvr-iptv-sync.cfg admin@192.168.1.1:/tmp/mnt/routerusb/dvr-iptv-sync/
+scp -O /path/to/local/dvr-iptv-sync.cfg admin@192.168.1.1:/tmp/mnt/routerusb/dvr-iptv-sync/
 ```
 
 ## Logs
