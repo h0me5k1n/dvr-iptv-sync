@@ -199,7 +199,7 @@ Make the file executable:
 chmod +x /jffs/scripts/services-start
 ```
 
-Then run the `cru a` line directly to activate it immediately without rebooting. To verify it was registered:
+To activate it immediately without waiting for a reboot, paste the full `cru a dvr-iptv-sync "..."` command above directly into your SSH session. To verify it was registered:
 
 ```sh
 cru l
