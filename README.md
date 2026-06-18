@@ -184,13 +184,16 @@ Adds any new domains found in your playlists to the domain_vpn_routing policy an
 
 ## Scheduling with cron
 
-IPTV provider domains don't change frequently, but automating a periodic check means you won't be caught out. A daily check is plenty.
+IPTV provider domains don't change frequently, but automating a periodic check means you won't be caught out.
 
 Add a cron job via the Merlin UI (**Administration → System → Cron Job**), or directly via Entware cron:
 
 ```sh
-# Run at 03:00 every day, applying updates automatically
+# Run once a day at 03:00
 0 3 * * * sh /tmp/mnt/routerusb/dvr-iptv-sync/dvr-iptv-sync.sh UPDATE >> /tmp/mnt/routerusb/dvr-iptv-sync/dvr-iptv-sync.log 2>&1
+
+# Run three times a day at 03:00, 12:00 and 19:00
+0 3,12,19 * * * sh /tmp/mnt/routerusb/dvr-iptv-sync/dvr-iptv-sync.sh UPDATE >> /tmp/mnt/routerusb/dvr-iptv-sync/dvr-iptv-sync.log 2>&1
 ```
 
 domain_vpn_routing also runs its own cron job (every 15 minutes by default) to re-query all policies, so newly added domains will be picked up even without this script re-running.
