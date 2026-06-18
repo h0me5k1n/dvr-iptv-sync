@@ -19,6 +19,9 @@
 #   IPTV provider URLs. See dvr-iptv-sync.cfg.example for format details.
 # =============================================================================
 
+# Entware binaries are not in PATH when scripts are run with sh on Merlin
+export PATH=/opt/bin:/opt/sbin:$PATH
+
 SCRIPTNAME="$(basename "$0")"
 SCRIPTDIR="$(cd "$(dirname "$0")" && pwd)"
 vLOG="$SCRIPTDIR/${SCRIPTNAME%.*}.log"
