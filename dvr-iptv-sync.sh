@@ -97,7 +97,7 @@ preflight_checks() {
     fi
 
     # Check curl is available
-    if ! command -v curl >/dev/null 2>&1; then
+    if ! which curl >/dev/null 2>&1; then
         echo "ERROR: curl not found."
         echo "       Install via Entware: opkg install curl"
         ERRORS=$((ERRORS + 1))
