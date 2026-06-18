@@ -102,21 +102,25 @@ If you named your policy something other than `IPTV`, update this line near the 
 POLICY_NAME=IPTV
 ```
 
-### 6. (Optional) Route playlist downloads through VPN
+### 6. Playlist download routing (auto-detected)
 
-If your provider blocks direct playlist downloads, you can force the `curl` fetches through a VPN tunnel interface. Set `CURL_INTERFACE` near the top of `dvr-iptv-sync.sh`:
+The script automatically reads which interface your `POLICY_NAME` policy is assigned to in domain_vpn_routing's config and binds `curl` to that tunnel when fetching playlists. This means if your provider blocks direct downloads, the fetch will go via the same VPN the streams are routed through.
 
-```sh
-# OpenVPN client 1
-CURL_INTERFACE=tun11
+You will see this reported during preflight:
 
-# WireGuard client 1
-CURL_INTERFACE=wg11
+```
+  [OK] Auto-detected download interface: tun11
 ```
 
-Leave it empty (the default) to use normal routing.
+If the policy is assigned to WAN the preflight will say so and no binding is applied.
 
-Interface names on Asuswrt-Merlin follow the pattern `tun1X` for OpenVPN and `wg1X` for WireGuard, where X is the client number (1–5). You can confirm the active interface name with `ip link show` on the router.
+To override the auto-detected interface, set `CURL_INTERFACE` manually near the top of `dvr-iptv-sync.sh`:
+
+```sh
+CURL_INTERFACE=tun11   # OpenVPN client 1
+CURL_INTERFACE=wg11    # WireGuard client 1
+CURL_INTERFACE=""      # Force default routing regardless of policy
+```
 
 ## Configuration
 

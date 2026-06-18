@@ -37,11 +37,9 @@ DOMAINLIST_FILE="/jffs/configs/domain_vpn_routing/policy_${POLICY_NAME}_domainli
 # Timeout in seconds for curl requests
 CURLTIMEOUT=30
 
-# Optional: network interface to bind playlist downloads to.
-# Use this if your provider blocks direct downloads and you need to fetch via VPN.
-# OpenVPN clients: tun11, tun12, tun13, tun14, tun15
-# WireGuard clients: wg11, wg12, wg13, wg14, wg15
-# Leave empty to use default routing.
+# Interface to bind playlist downloads to. Leave empty to auto-detect from the
+# domain_vpn_routing policy config (recommended). Set explicitly to override,
+# e.g. tun11 (OpenVPN client 1) or wg11 (WireGuard client 1).
 CURL_INTERFACE=""
 
 # Known dynamic DNS providers - use full domain rather than TLD for these
@@ -66,6 +64,34 @@ TrimLog() {
 log_and_print() {
     echo "$*"
     PrintLog "$*"
+}
+
+# =============================================================================
+# INTERFACE DETECTION
+# =============================================================================
+
+# Read the interface assigned to the policy from domain_vpn_routing's config
+# and map it to the tunnel device name curl can bind to.
+detect_policy_interface() {
+    local DVR_CONF="/jffs/configs/domain_vpn_routing/domain_vpn_routing.conf"
+    [ -f "$DVR_CONF" ] || return 0
+
+    local IFACE
+    IFACE=$(awk -F"|" -v p="$POLICY_NAME" '$1 == p {print $4; exit}' "$DVR_CONF")
+
+    case "$IFACE" in
+        ovpnc1) echo "tun11" ;;
+        ovpnc2) echo "tun12" ;;
+        ovpnc3) echo "tun13" ;;
+        ovpnc4) echo "tun14" ;;
+        ovpnc5) echo "tun15" ;;
+        wgc1)   echo "wg11"  ;;
+        wgc2)   echo "wg12"  ;;
+        wgc3)   echo "wg13"  ;;
+        wgc4)   echo "wg14"  ;;
+        wgc5)   echo "wg15"  ;;
+        *)      echo ""      ;;  # WAN or unknown — no binding needed
+    esac
 }
 
 # =============================================================================
@@ -101,6 +127,18 @@ preflight_checks() {
         ERRORS=$((ERRORS + 1))
     else
         echo "  [OK] Policy $POLICY_NAME found"
+
+        # Auto-detect download interface from policy config if not manually set
+        if [ -z "$CURL_INTERFACE" ]; then
+            CURL_INTERFACE=$(detect_policy_interface)
+            if [ -n "$CURL_INTERFACE" ]; then
+                echo "  [OK] Auto-detected download interface: $CURL_INTERFACE"
+            else
+                echo "  [OK] Policy routed via WAN — no interface binding needed"
+            fi
+        else
+            echo "  [OK] Download interface (manual override): $CURL_INTERFACE"
+        fi
     fi
 
     # Check curl is available
