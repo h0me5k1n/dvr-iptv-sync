@@ -186,15 +186,32 @@ Adds any new domains found in your playlists to the domain_vpn_routing policy an
 
 IPTV provider domains don't change frequently, but automating a periodic check means you won't be caught out.
 
-Add a cron job via the Merlin UI (**Administration → System → Cron Job**), or directly via Entware cron:
+Use the Merlin `cru` command to register the job. To survive reboots, add it to `/jffs/scripts/services-start` (create the file if it doesn't exist):
 
 ```sh
-# Run once a day at 03:00
-0 3 * * * sh /tmp/mnt/routerusb/dvr-iptv-sync/dvr-iptv-sync.sh UPDATE >> /tmp/mnt/routerusb/dvr-iptv-sync/dvr-iptv-sync.log 2>&1
-
-# Run three times a day at 03:00, 12:00 and 19:00
-0 3,12,19 * * * sh /tmp/mnt/routerusb/dvr-iptv-sync/dvr-iptv-sync.sh UPDATE >> /tmp/mnt/routerusb/dvr-iptv-sync/dvr-iptv-sync.log 2>&1
+#!/bin/sh
+cru a dvr-iptv-sync "0 3,12,19 * * * sh /tmp/mnt/routerusb/dvr-iptv-sync/dvr-iptv-sync.sh UPDATE >> /tmp/mnt/routerusb/dvr-iptv-sync/dvr-iptv-sync.log 2>&1"
 ```
+
+Make the file executable:
+
+```sh
+chmod +x /jffs/scripts/services-start
+```
+
+Then run the `cru a` line directly to activate it immediately without rebooting. To verify it was registered:
+
+```sh
+cru l
+```
+
+To remove it:
+
+```sh
+cru d dvr-iptv-sync
+```
+
+Adjust the schedule to taste — `0 3,12,19 * * *` runs at 03:00, 12:00 and 19:00 daily; `0 3 * * *` runs once at 03:00.
 
 domain_vpn_routing also runs its own cron job (every 15 minutes by default) to re-query all policies, so newly added domains will be picked up even without this script re-running.
 
