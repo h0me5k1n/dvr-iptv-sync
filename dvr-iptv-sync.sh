@@ -155,6 +155,14 @@ preflight_checks() {
         fi
     fi
 
+    # Warn if cru job is not persisted in services-start (won't survive reboot)
+    if ! grep -qs "dvr-iptv-sync" /jffs/scripts/services-start; then
+        echo "  WARNING: Cron job not found in /jffs/scripts/services-start."
+        echo "           The schedule will not survive a reboot. See README for setup."
+    else
+        echo "  [OK] Cron job persisted in services-start"
+    fi
+
     if [ "$ERRORS" -gt 0 ]; then
         echo ""
         echo "Preflight checks failed with $ERRORS error(s). Exiting."
