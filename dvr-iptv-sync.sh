@@ -362,6 +362,8 @@ while IFS= read -r LINE; do
             URL=$(echo "$LINE" | cut -d'|' -f2)
             log_and_print "Processing M3U provider: $URL"
             HOSTS=$(fetch_and_extract "$URL" "$URL")
+            SOURCE_HOST=$(echo "$URL" | awk -F[/:] '{print $4}')
+            [ -n "$SOURCE_HOST" ] && HOSTS=$(printf "%s\n%s" "$HOSTS" "$SOURCE_HOST" | sort -u | grep -v '^$')
             ;;
         XC)
             SERVER=$(echo "$LINE" | cut -d'|' -f2)
@@ -370,6 +372,8 @@ while IFS= read -r LINE; do
             URL=$(build_xc_url "$SERVER" "$USER" "$PASS")
             log_and_print "Processing XC provider: $SERVER (user: $USER)"
             HOSTS=$(fetch_and_extract "$URL" "$SERVER")
+            SOURCE_HOST=$(echo "$SERVER" | awk -F[/:] '{print $4}')
+            [ -n "$SOURCE_HOST" ] && HOSTS=$(printf "%s\n%s" "$HOSTS" "$SOURCE_HOST" | sort -u | grep -v '^$')
             ;;
         *)
             log_and_print "WARNING: Unknown line type '$TYPE' - skipping: $LINE"
